@@ -9,25 +9,32 @@ from .state_machine import TradeState, transition
 
 
 class ExecutionEngine:
-    def __init__(self, risk, store, notifier=None, dry_run: bool = True):
-        self.risk = risk
+    def __init__(self, risk_check, store, notifier=None, dry_run: bool = True):
+        self.risk_check = risk_check
         self.store = store
         self.notifier = notifier
         self.dry_run = dry_run
 
-    async def open_pair(self, market_a: str, side_a: str, market_b: str, side_b: str, size_a: float, size_b: float, zscore: float, hedge_ratio: float, submit):
+    def _save(self, trade: Trade) -> None:
+        self.store.save(trade.trade_id, trade.state.value, trade.to_dict(), datetime.now(timezone.utc).isoformat())
+
+    async def open_pair(self, market_a: str, side_a: str, market_b: str, side_b: str, size_a: float, size_b: float, notional_usd: float, zscore: float, hedge_ratio: float, submit=None):
         trade = Trade.create(
             str(uuid.uuid4()), market_a, market_b, zscore, hedge_ratio,
             Leg(market_a, side_a, size_a), Leg(market_b, side_b, size_b),
         )
         trade.state = transition(trade.state, TradeState.RISK_CHECK)
-        self.store.save(trade.trade_id, trade.state.value, trade.to_dict(), datetime.now(timezone.utc).isoformat())
+        self._save(trade)
 
-        if not self.risk.approve_trade(size_a, 0, 0, 0).approved:
+        approved, reason = self.risk_check(notional_usd)
+        if not approved:
             trade.state = TradeState.CLOSED
-            trade.exit_reason = "risk_check_failed"
-            self.store.save(trade.trade_id, trade.state.value, trade.to_dict(), datetime.now(timezone.utc).isoformat())
+            trade.exit_reason = reason
+            self._save(trade)
             return trade
+
+        if not self.dry_run and submit is None:
+            raise ValueError("A live order submitter is required when dry_run=False")
 
         try:
             if self.dry_run:
@@ -41,7 +48,7 @@ class ExecutionEngine:
                 trade.state = transition(trade.state, TradeState.HEDGED)
             else:
                 first = await submit(trade.leg_1)
-                trade.leg_1.order_id = str(first.get("order_id"))
+                trade.leg_1.order_id = str(first["order_id"])
                 trade.state = transition(trade.state, TradeState.LEG_1_SUBMITTED)
                 first_fill = await submit.wait_for_fill(trade.leg_1.order_id)
                 if not first_fill.filled:
@@ -51,7 +58,7 @@ class ExecutionEngine:
                 trade.state = transition(trade.state, TradeState.LEG_1_FILLED)
 
                 second = await submit(trade.leg_2)
-                trade.leg_2.order_id = str(second.get("order_id"))
+                trade.leg_2.order_id = str(second["order_id"])
                 trade.state = transition(trade.state, TradeState.LEG_2_SUBMITTED)
                 second_fill = await submit.wait_for_fill(trade.leg_2.order_id)
                 if not second_fill.filled:
@@ -69,5 +76,5 @@ class ExecutionEngine:
             if self.notifier:
                 await self.notifier(f"Trade {trade.trade_id} entered {trade.state.value}: {exc}")
         finally:
-            self.store.save(trade.trade_id, trade.state.value, trade.to_dict(), datetime.now(timezone.utc).isoformat())
+            self._save(trade)
         return trade
