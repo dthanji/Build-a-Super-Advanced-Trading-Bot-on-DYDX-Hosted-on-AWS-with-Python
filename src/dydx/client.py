@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from dydx_v4_client.indexer.rest.indexer_client import IndexerClient
-from dydx_v4_client.network import MAINNET, TESTNET
+from dydx_v4_client.network import TESTNET
 from dydx_v4_client.node.client import NodeClient
 from dydx_v4_client.wallet import Wallet
 
@@ -27,9 +27,10 @@ class DydxClient:
         address: str | None = None,
         subaccount_number: int = 0,
     ) -> "DydxClient":
-        selected = TESTNET if network.lower() == "testnet" else MAINNET
-        node = await NodeClient.connect(selected.node)
-        indexer = IndexerClient(selected.rest_indexer)
+        if network.lower() != "testnet":
+            raise ValueError("Only dYdX testnet is enabled until mainnet endpoints are explicitly configured")
+        node = await NodeClient.connect(TESTNET.node)
+        indexer = IndexerClient(TESTNET.rest_indexer)
 
         wallet = None
         if mnemonic:
