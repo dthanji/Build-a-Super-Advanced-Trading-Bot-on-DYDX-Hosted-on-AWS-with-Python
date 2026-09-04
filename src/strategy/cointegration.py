@@ -50,7 +50,7 @@ def half_life(spread: pd.Series) -> float:
         return float("inf")
     model = OLS(delta.to_numpy(), add_constant(lagged.to_numpy())).fit()
     coef = float(model.params[1])
-    if coef >= 0:
+    if coef >= -1e-10:
         return float("inf")
     return float(-np.log(2.0) / coef)
 
