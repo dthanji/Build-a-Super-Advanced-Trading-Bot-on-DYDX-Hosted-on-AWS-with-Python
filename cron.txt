@@ -1,11 +1,9 @@
-crontab -e
-
-CRON item - Daily
-
-0 12 * * * /bin/timeout -s 2 86330 python3 dydx_bot/program/main.py > output.txt  2>&1
-
-CRON item - 5 Mins
-
-*/5 * * * * /bin/timeout -s 2 290 python3 dydx_bot/program/main.py > output.txt  2>&1
-
-crontab -l
+# The legacy course cron commands are intentionally retired.
+#
+# For continuous operation, install systemd/dydx-bot.service instead:
+#   sudo cp systemd/dydx-bot.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now dydx-bot
+#   sudo journalctl -u dydx-bot -f
+#
+# Keep the service in paper/dry-run mode while validating the deployment.
