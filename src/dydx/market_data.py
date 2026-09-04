@@ -26,12 +26,8 @@ class MarketData:
         to_iso: str | None = None,
     ) -> pd.DataFrame:
         """Return normalized OHLCV candles, oldest first, with UTC timestamps."""
-        response = await self.client.indexer.markets.get_candles(
-            market,
-            resolution,
-            from_iso,
-            to_iso,
-            limit,
+        response = await self.client.indexer.markets.get_perpetual_market_candles(
+            market, resolution, from_iso, to_iso, limit
         )
         candles = response.get("candles", response) if isinstance(response, dict) else response
         rows: list[dict[str, Any]] = []
@@ -54,6 +50,5 @@ class MarketData:
         if frame.empty:
             return pd.DataFrame(columns=["timestamp", "open", "high", "low", "close", "volume"])
         frame = frame.drop_duplicates("timestamp").sort_values("timestamp").reset_index(drop=True)
-        now = datetime.now(timezone.utc)
-        frame = frame[frame["timestamp"] <= now]
-        return frame
+        frame = frame[frame["timestamp"] <= datetime.now(timezone.utc)]
+        return frame.reset_index(drop=True)
