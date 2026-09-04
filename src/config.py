@@ -43,6 +43,11 @@ class Settings:
     max_pairs: int = _int("MAX_PAIRS", 3)
     max_daily_loss_usd: float = _float("MAX_DAILY_LOSS_USD", 25.0)
     max_holding_hours: float = _float("MAX_HOLDING_HOURS", 24.0)
+    subaccount_number: int = _int("DYDX_SUBACCOUNT_NUMBER", 0)
+    network: str = os.getenv("DYDX_NETWORK", "testnet")
+    dydx_address: str | None = os.getenv("DYDX_ADDRESS")
+    dydx_mnemonic: str | None = os.getenv("DYDX_MNEMONIC")
+    dydx_private_key: str | None = os.getenv("DYDX_PRIVATE_KEY")
     telegram_token: str | None = os.getenv("TELEGRAM_TOKEN")
     telegram_chat_id: str | None = os.getenv("TELEGRAM_CHAT_ID")
 
