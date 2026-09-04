@@ -18,7 +18,7 @@ class ExecutionEngine:
     def _save(self, trade: Trade) -> None:
         self.store.save(trade.trade_id, trade.state.value, trade.to_dict(), datetime.now(timezone.utc).isoformat())
 
-    async def open_pair(self, market_a: str, side_a: str, market_b: str, side_b: str, size_a: float, size_b: float, notional_usd: float, zscore: float, hedge_ratio: float, submit=None):
+    async def open_pair(self, market_a: str, side_a: str, market_b: str, side_b: str, size_a: float, size_b: float, notional_usd: float, zscore: float, hedge_ratio: float, submitter=None):
         trade = Trade.create(
             str(uuid.uuid4()), market_a, market_b, zscore, hedge_ratio,
             Leg(market_a, side_a, size_a), Leg(market_b, side_b, size_b),
@@ -33,7 +33,7 @@ class ExecutionEngine:
             self._save(trade)
             return trade
 
-        if not self.dry_run and submit is None:
+        if not self.dry_run and submitter is None:
             raise ValueError("A live order submitter is required when dry_run=False")
 
         try:
@@ -47,20 +47,20 @@ class ExecutionEngine:
                 trade.state = transition(trade.state, TradeState.LEG_2_SUBMITTED)
                 trade.state = transition(trade.state, TradeState.HEDGED)
             else:
-                first = await submit(trade.leg_1)
+                first = await submitter.submit(self._request(trade.leg_1))
                 trade.leg_1.order_id = str(first["order_id"])
                 trade.state = transition(trade.state, TradeState.LEG_1_SUBMITTED)
-                first_fill = await submit.wait_for_fill(trade.leg_1.order_id)
+                first_fill = await submitter.wait_for_fill(trade.leg_1.order_id)
                 if not first_fill.filled:
                     trade.state = transition(trade.state, TradeState.LEG_1_FAILED)
                     raise RuntimeError("first leg did not fill")
                 trade.leg_1.filled_size = first_fill.filled_size
                 trade.state = transition(trade.state, TradeState.LEG_1_FILLED)
 
-                second = await submit(trade.leg_2)
+                second = await submitter.submit(self._request(trade.leg_2))
                 trade.leg_2.order_id = str(second["order_id"])
                 trade.state = transition(trade.state, TradeState.LEG_2_SUBMITTED)
-                second_fill = await submit.wait_for_fill(trade.leg_2.order_id)
+                second_fill = await submitter.wait_for_fill(trade.leg_2.order_id)
                 if not second_fill.filled:
                     trade.state = transition(trade.state, TradeState.LEG_2_FAILED)
                     raise RuntimeError("second leg did not fill")
@@ -78,3 +78,8 @@ class ExecutionEngine:
         finally:
             self._save(trade)
         return trade
+
+    @staticmethod
+    def _request(leg: Leg):
+        from src.dydx.orders import OrderRequest
+        return OrderRequest(leg.market, leg.side, leg.requested_size)
